@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import pandas as pd
 import cv2
 from time import time
 import sys
@@ -31,7 +32,7 @@ class ObjectDetection:
         self.model.conf = 0.001 # set inference threshold at 0.3
         self.model.iou = 0.65 # set inference IOU threshold at 0.3
         #print(self.model.classes)
-        self.model.classes = [0] # set model to only detect "Person" class
+        self.model.classes = [0, 63] # set model to only detect "Person" and laptop class
         self.out_file = out_file
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -68,9 +69,10 @@ class ObjectDetection:
 
     def load_model(self):
         """
-        Function loads the yolo5 model from PyTorch Hub.
+        Function loads the detection model from PyTorch Hub.
         """
-        model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True)
+        model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True) # Loads YOLOv5s from torch hub
+        
         #model = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_ssd', map_location = torch.device('cpu'))
         #model.to('cpu')
         #print(model.classes)
@@ -84,30 +86,38 @@ class ObjectDetection:
         """
         self.model.to(self.device)
         results = self.model([frame])
-        labels, cord = results.xyxyn[0][:, -1].to('cpu').numpy(), results.xyxyn[0][:, :-1].to('cpu').numpy()
-        return labels, cord
+        #print(results.pandas().xyxyn[0])
+        labels, cord, classNo = results.xyxyn[0][:, -1].to('cpu').numpy(), results.xyxyn[0][:, :-1].to('cpu').numpy(), results.xyxyn[0][:, -1].to('cpu').numpy()
+        #print(labels)
+        return labels, cord, classNo
 
-    def plot_boxes(self, results, frame, count):
+    def plot_boxes(self, results, frame, count, bcount):
         """
         plots boxes and labels on frame.
         :param results: inferences made by model
         :param frame: frame on which to  make the plots
         :return: new frame with boxes and labels plotted.
         """
-        labels, cord = results
+        labels, cord, classNo = results
         n = len(labels)
         x_shape, y_shape = frame.shape[1], frame.shape[0]
         for i in range(n):
             row = cord[i]
             x1, y1, x2, y2 = int(row[0]*x_shape), int(row[1]*y_shape), int(row[2]*x_shape), int(row[3]*y_shape)
             bgr = (0, 0, 255)
-            if(row[4]*100 >= 75):
-                cv2.rectangle(frame, (x1, y1), (x2, y2), bgr, 1)
-                label = f"{int(row[4]*100)}"
-                cv2.putText(frame, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1)
-                cv2.putText(frame, f"Total Targets: {n}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            if(row[4]*100 >= 75 and labels[i] == 0): # Only plots box around target if recognition is over 75% confidence
+                cv2.rectangle(frame, (x1, y1), (x2, y2), bgr, 1) # Plots rectangle around target
+                label = f"{int(row[4]*100)}" # Labels the target with the confidence of the recognition
+                cv2.putText(frame, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1) # Adds the label to the target
+                cv2.putText(frame, f"Total Targets: {n}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2) # Displays total targets
                 count+= 1
-        return frame, count
+            elif(row[4]*100 >= 75 and labels[i] == 63): # Only plots box around target if recognition is over 75% confidence
+                cv2.rectangle(frame, (x1, y1), (x2, y2), bgr, 1) # Plots rectangle around target
+                label = f"{int(row[4]*100)}" # Labels the target with the confidence of the recognition
+                cv2.putText(frame, label, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 1) # Adds the label to the target
+                cv2.putText(frame, f"Total Targets: {n}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2) # Displays total targets
+                bcount+= 1
+        return frame, count, bcount
 
     def scan_and_plot(self, frame):
         results = self.score_frame(frame)
@@ -137,17 +147,24 @@ class ObjectDetection:
         #tfc = int(player.get(cv2.CAP_PROP_FRAME_COUNT))
         #tfcc = 0
         count = 1
+        bcount= 1
         camno = 0
         while True:
             fc += 1
             start_time = time()
-            if (count%16)==0 and camno == 0:
+            if (count%5)==0 and camno == 0:
               #  ret, frame = player2.read()
                 frame = player2.read()
-                print("blahhhh")
+                print("Switched to Camera 2")
                 camno =1
-            elif (camno == 1 and not((count%15) == 0)):
+                count+=1
+            elif (bcount%5)==0 and camno == 1:
                # ret, frame = player2.read()
+                frame = player.read()
+                camno = 0
+                bcount+=1
+                print("Switched to Camera 1")
+            elif(camno == 1):
                 frame = player2.read()
             else:
                # ret, frame = player.read()
@@ -155,10 +172,11 @@ class ObjectDetection:
                 camno = 0
             # if not ret:
             #    break
-            print(count)
+            #print(count)
+            #print(bcount)
             #frame = imutils.resize(frame, width=300)
             results = self.score_frame(frame)
-            frame, count = self.plot_boxes(results, frame, count)
+            frame, count, bcount = self.plot_boxes(results, frame, count, bcount)
             #frame = self.scan_and_plot(frame)
             #cv2.imshow('Frame', frame)
             end_time = time()

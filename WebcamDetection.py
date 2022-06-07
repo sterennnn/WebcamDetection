@@ -4,9 +4,11 @@ import pandas as pd
 import cv2
 from time import time
 import sys
+import threading
 import imutils
 from imutils.video import WebcamVideoStream
 from imutils.video import VideoStream
+
 
 class ObjectDetection:
     """

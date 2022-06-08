@@ -76,7 +76,7 @@ class ObjectDetection:
         """
         Function loads the detection model from PyTorch Hub.
         """
-        model = torch.hub.load('ultralytics/yolov5', 'yolov5s6', pretrained=True) # Loads YOLOv5s from torch hub
+        model = torch.hub.load('ultralytics/yolov5', 'yolov5s', pretrained=True) # Loads YOLOv5s from torch hub
         
         #model = torch.hub.load('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_ssd', map_location = torch.device('cpu'))
         #model.to('cpu')
